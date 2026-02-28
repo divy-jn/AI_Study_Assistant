@@ -66,7 +66,7 @@ class EmbeddingService(LoggerMixin):
         self._cache_misses = 0
         
         self.logger.info(
-            f"✅ Embedding Service ready | "
+            f"Embedding Service ready | "
             f"Embedding dimension: {self.get_embedding_dimension()}"
         )
     
@@ -75,13 +75,13 @@ class EmbeddingService(LoggerMixin):
         if settings.EMBEDDING_DEVICE == "cuda" and torch.cuda.is_available():
             device = "cuda"
             gpu_name = torch.cuda.get_device_name(0)
-            self.logger.info(f"🎮 Using GPU: {gpu_name}")
+            self.logger.info(f"Using GPU: {gpu_name}")
         elif settings.EMBEDDING_DEVICE == "mps" and torch.backends.mps.is_available():
             device = "mps"
-            self.logger.info("🍎 Using Apple Metal (MPS)")
+            self.logger.info("Using Apple Metal (MPS)")
         else:
             device = "cpu"
-            self.logger.info("💻 Using CPU")
+            self.logger.info("Using CPU")
         
         return device
     
@@ -103,7 +103,7 @@ class EmbeddingService(LoggerMixin):
                 return model
                 
             except Exception as e:
-                self.logger.error(f"❌ Failed to load model: {str(e)}", exc_info=True)
+                self.logger.error(f"Failed to load model: {str(e)}", exc_info=True)
                 raise VectorEmbeddingException(
                     text_sample=f"Model: {self.model_name}",
                     original_exception=e
@@ -171,7 +171,7 @@ class EmbeddingService(LoggerMixin):
                             embeddings[idx] = emb
                     
                     self.logger.debug(
-                        f"📊 Cache stats | "
+                        f"Cache stats | "
                         f"Hits: {self._cache_hits} | "
                         f"Misses: {self._cache_misses} | "
                         f"Hit rate: {self._get_cache_hit_rate():.1%}"
@@ -194,7 +194,7 @@ class EmbeddingService(LoggerMixin):
             except Exception as e:
                 sample = texts[0] if texts else "empty"
                 self.logger.error(
-                    f"❌ Embedding generation failed | Sample: {sample[:100]}",
+                    f"Embedding generation failed | Sample: {sample[:100]}",
                     exc_info=True
                 )
                 raise VectorEmbeddingException(
@@ -264,7 +264,7 @@ class EmbeddingService(LoggerMixin):
         self._embedding_cache.clear()
         self._cache_hits = 0
         self._cache_misses = 0
-        self.logger.info(f"🗑️ Cleared {cache_size} cached embeddings")
+        self.logger.info(f"Cleared {cache_size} cached embeddings")
     
     def get_embedding_dimension(self) -> int:
         """Get embedding vector dimension"""
@@ -352,7 +352,7 @@ if __name__ == "__main__":
     # Test single text
     text = "This is a test sentence."
     embedding = embedding_service.encode(text)
-    print(f"✅ Single embedding shape: {embedding.shape}")
+    print(f"Single embedding shape: {embedding.shape}")
     
     # Test batch
     texts = [
@@ -361,18 +361,18 @@ if __name__ == "__main__":
         "Third sentence."
     ]
     embeddings = embedding_service.encode(texts)
-    print(f"✅ Batch embeddings shape: {embeddings.shape}")
+    print(f"Batch embeddings shape: {embeddings.shape}")
     
     # Test similarity
     similarity = embedding_service.compute_similarity(texts[0], texts[1])
-    print(f"✅ Similarity: {similarity:.4f}")
+    print(f"Similarity: {similarity:.4f}")
     
     # Test cache (encode same text again)
     embedding2 = embedding_service.encode(text)
-    print(f"✅ Cache hit: {np.allclose(embedding, embedding2)}")
+    print(f"Cache hit: {np.allclose(embedding, embedding2)}")
     
     # Print stats
     stats = embedding_service.get_stats()
-    print(f"\n📊 Stats:")
+    print(f"\nStats:")
     for key, value in stats.items():
         print(f"  {key}: {value}")

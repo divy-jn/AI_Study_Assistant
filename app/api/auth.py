@@ -4,7 +4,7 @@ Handles user registration, login, and JWT token management
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import jwt
 import bcrypt
@@ -25,13 +25,9 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-# OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
 
 def get_db():
     """Get database connection"""
@@ -56,9 +52,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
@@ -150,9 +146,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     return user
 
 
-# ============================================================================
-# API Endpoints
-# ============================================================================
 
 @router.post("/register", response_model=UserResponse)
 async def register(user: UserCreate):
@@ -168,7 +161,7 @@ async def register(user: UserCreate):
     Raises:
         HTTPException: If user already exists
     """
-    logger.info(f"📝 Registration attempt | Username: {user.username}")
+    logger.info(f"Registration attempt | Username: {user.username}")
     
     # Check if user exists
     existing_user = get_user_by_username(user.username)
@@ -197,7 +190,7 @@ async def register(user: UserCreate):
         conn.commit()
         user_id = cursor.lastrowid
         
-        logger.info(f"✅ User registered | ID: {user_id} | Username: {user.username}")
+        logger.info(f"User registered | ID: {user_id} | Username: {user.username}")
         
         # Fetch created user
         cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -209,7 +202,7 @@ async def register(user: UserCreate):
         
     except sqlite3.IntegrityError as e:
         conn.close()
-        logger.error(f"❌ Registration failed: {e}")
+        logger.error(f"Registration failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with this email already exists"
@@ -236,7 +229,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = get_user_by_username(form_data.username)
     
     if not user:
-        logger.warning(f"⚠️ Login failed | User not found: {form_data.username}")
+        logger.warning(f"Login failed | User not found: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -245,7 +238,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     
     # Verify password
     if not verify_password(form_data.password, user["hashed_password"]):
-        logger.warning(f"⚠️ Login failed | Invalid password: {form_data.username}")
+        logger.warning(f"Login failed | Invalid password: {form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -257,7 +250,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         data={"sub": user["username"], "user_id": user["id"]}
     )
     
-    logger.info(f"✅ Login successful | User: {form_data.username}")
+    logger.info(f"Login successful | User: {form_data.username}")
     
     return {
         "access_token": access_token,
@@ -298,24 +291,102 @@ async def logout(current_user: dict = Depends(get_current_user)):
     }
 
 
-# ============================================================================
-# Database Initialization
-# ============================================================================
+@router.post("/forgot-password")
+async def forgot_password(username: str = "", email: str = ""):
+    """
+    Verify identity via username and email, then issue a short-lived reset token.
+    """
+    if not username or not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both username and email are required"
+        )
+    
+    user = get_user_by_username(username)
+    
+    if not user or user.get("email", "").lower() != email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with that username and email combination"
+        )
+    
+    reset_token = create_access_token(
+        data={"sub": user["username"], "user_id": user["id"], "purpose": "password_reset"},
+        expires_delta=timedelta(minutes=10)
+    )
+    
+    logger.info(f"Password reset token issued | Username: {username}")
+    
+    return {
+        "message": "Identity verified. Use the reset token to set a new password.",
+        "reset_token": reset_token
+    }
 
-def init_database():
-    """Initialize database with schema"""
+
+@router.post("/reset-password")
+async def reset_password(reset_token: str = "", new_password: str = ""):
+    """
+    Reset password using a valid reset token.
+    """
+    if not reset_token or not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token and new password are required"
+        )
+    
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters"
+        )
+    
+    try:
+        payload = jwt.decode(reset_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        
+        if payload.get("purpose") != "password_reset":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid reset token"
+            )
+        
+        username = payload.get("sub")
+        user_id = payload.get("user_id")
+        
+        if not username or not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid reset token"
+            )
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired. Please request a new one."
+        )
+    except jwt.JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reset token"
+        )
+    
+    hashed_password = get_password_hash(new_password)
+    
     conn = get_db()
-    
-    # Read and execute schema
-    with open("database_schema.sql", "r") as f:
-        schema = f.read()
-        conn.executescript(schema)
-    
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET hashed_password = ? WHERE id = ? AND username = ?",
+        (hashed_password, user_id, username)
+    )
+    conn.commit()
+    rows_affected = cursor.rowcount
     conn.close()
-    logger.info("✅ Database initialized")
-
-
-if __name__ == "__main__":
-    # Initialize database
-    init_database()
-    print("✅ Database initialized successfully")
+    
+    if rows_affected == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    logger.info(f"Password reset successful | Username: {username}")
+    
+    return {"message": "Password has been reset successfully. You can now log in with your new password."}

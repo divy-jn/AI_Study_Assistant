@@ -101,9 +101,7 @@ class BaseAppException(Exception):
         return base_str
 
 
-# ============================================================================
 # Authentication & Authorization Exceptions
-# ============================================================================
 
 class AuthenticationException(BaseAppException):
     """Base class for authentication-related exceptions"""
@@ -164,9 +162,7 @@ class UserAlreadyExistsException(AuthenticationException):
         )
 
 
-# ============================================================================
 # Document Processing Exceptions
-# ============================================================================
 
 class DocumentException(BaseAppException):
     """Base class for document-related exceptions"""
@@ -238,9 +234,7 @@ class DocumentNotFoundException(DocumentException):
         )
 
 
-# ============================================================================
 # Vector Store Exceptions
-# ============================================================================
 
 class VectorStoreException(BaseAppException):
     """Base class for vector store exceptions"""
@@ -283,9 +277,7 @@ class VectorSearchException(VectorStoreException):
         )
 
 
-# ============================================================================
 # LLM Service Exceptions
-# ============================================================================
 
 class LLMException(BaseAppException):
     """Base class for LLM-related exceptions"""
@@ -349,9 +341,7 @@ class LLMRateLimitException(LLMException):
         )
 
 
-# ============================================================================
 # Workflow Exceptions
-# ============================================================================
 
 class WorkflowException(BaseAppException):
     """Base class for workflow exceptions"""
@@ -407,9 +397,7 @@ class MissingDocumentsException(WorkflowException):
         )
 
 
-# ============================================================================
 # Database Exceptions
-# ============================================================================
 
 class DatabaseException(BaseAppException):
     """Base class for database exceptions"""
@@ -440,9 +428,7 @@ class DatabaseQueryException(DatabaseException):
         )
 
 
-# ============================================================================
 # Configuration Exceptions
-# ============================================================================
 
 class ConfigurationException(BaseAppException):
     """Base class for configuration exceptions"""

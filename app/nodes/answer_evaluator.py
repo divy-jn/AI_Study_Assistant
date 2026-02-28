@@ -39,7 +39,7 @@ class AnswerEvaluator:
         doc_types = state.get("document_types_available", [])
         
         self.logger.info(
-            f"📊 Evaluating answer | "
+            f"Evaluating answer | "
             f"Query length: {len(query)} | "
             f"Available docs: {doc_types}"
         )
@@ -98,7 +98,7 @@ class AnswerEvaluator:
                 state["nodes_visited"].append("answer_evaluator")
                 
                 self.logger.info(
-                    f"✅ Evaluation complete | "
+                    f"Evaluation complete | "
                     f"Score: {evaluation['obtained_marks']}/{evaluation['total_marks']} "
                     f"({evaluation_result['percentage']:.1f}%)"
                 )
@@ -106,7 +106,7 @@ class AnswerEvaluator:
                 return state
                 
             except Exception as e:
-                self.logger.error(f"❌ Answer evaluation failed: {str(e)}", exc_info=True)
+                self.logger.error(f"Answer evaluation failed: {str(e)}", exc_info=True)
                 raise WorkflowNodeException(
                     node_name="answer_evaluator",
                     reason=str(e),
@@ -358,39 +358,3 @@ async def evaluate_answer_node(state: GraphState) -> GraphState:
         Updated state with evaluation results
     """
     return await _answer_evaluator.evaluate(state)
-
-
-if __name__ == "__main__":
-    import asyncio
-    from langgraph_state import create_initial_state
-    
-    async def test():
-        state = create_initial_state(
-            user_id=1,
-            query="""Question: What is machine learning?
-My answer: Machine learning is a part of AI where computers learn from data. 
-It includes supervised learning where we have labeled data, and unsupervised learning. 
-Examples are spam filters and recommendation systems."""
-        )
-        
-        state["context"] = """
---- MARKING SCHEME ---
-Q1: Define machine learning (10 marks)
-- Definition of ML as subset of AI (3 marks)
-- Types: supervised, unsupervised, reinforcement learning (4 marks)
-- Real-world examples (3 marks)
-"""
-        
-        state["document_types_available"] = ["marking_scheme"]
-        
-        result = await evaluate_answer_node(state)
-        
-        print("\n" + "="*60)
-        print("EVALUATION RESULT")
-        print("="*60)
-        eval_result = result["evaluation_result"]
-        print(f"Score: {eval_result['obtained_marks']}/{eval_result['total_marks']} ({eval_result['percentage']:.1f}%)")
-        print(f"\nFeedback:\n{eval_result['feedback']}")
-        print("="*60)
-    
-    asyncio.run(test())

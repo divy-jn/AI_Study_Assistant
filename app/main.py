@@ -1,8 +1,8 @@
 """
-FastAPI Main Application
-Exposes all educational AI functionality via REST API
+Application entry point and FastAPI server configuration.
+Defines middleware, exception handlers, health checks, and route registration.
 """
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,7 +17,6 @@ from app.core.config import settings, ensure_directories
 from app.core.health_check import get_system_health
 from app.core.exceptions import BaseAppException
 
-# Import services
 from app.services.llm_service import get_llm_service, close_llm_service
 
 
@@ -26,11 +25,8 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifespan context manager for startup and shutdown events
-    """
-    # Startup
-    logger.info("🚀 Starting AI Educational System...")
+    """Application lifespan manager for startup and shutdown events."""
+    logger.info("Starting AI Educational System...")
     
     # Setup logging
     setup_logging(
@@ -45,43 +41,41 @@ async def lifespan(app: FastAPI):
     try:
         llm = await get_llm_service()
         await llm.check_model_availability()
-        logger.info("✅ LLM service initialized")
+        logger.info("LLM service initialized")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize LLM: {e}")
+        logger.error(f"Failed to initialize LLM: {e}")
     
-    logger.info("✅ Application started successfully")
+    logger.info("Application started successfully")
     
     yield
     
     # Shutdown
-    logger.info("🛑 Shutting down AI Educational System...")
+    logger.info("Shutting down AI Educational System...")
     await close_llm_service()
-    logger.info("✅ Application shutdown complete")
+    logger.info("Application shutdown complete")
 
 
 # Initialize FastAPI app
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI-powered educational document reasoning system with semantic evaluation",
+    description="AI Study Assistant API",
     lifespan=lifespan
 )
 
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 
-# Global exception handler
 @app.exception_handler(BaseAppException)
 async def custom_exception_handler(request, exc: BaseAppException):
-    """Handle custom application exceptions"""
+    """Handle application-specific exceptions with structured error responses."""
     logger.error(
         f"Application error: {exc.error_code.value} | {exc.message}",
         extra={"error_details": exc.details}
@@ -95,7 +89,7 @@ async def custom_exception_handler(request, exc: BaseAppException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc: Exception):
-    """Handle unexpected exceptions"""
+    """Catch-all handler for unexpected server errors."""
     logger.error(f"Unexpected error: {str(exc)}", exc_info=True)
     
     return JSONResponse(
@@ -108,13 +102,9 @@ async def general_exception_handler(request, exc: Exception):
     )
 
 
-# ============================================================================
-# Health & Status Endpoints
-# ============================================================================
-
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Service metadata and status."""
     return {
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
@@ -125,10 +115,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """
-    Comprehensive health check
-    Returns status of all system components
-    """
+    """Detailed health check including database, LLM, and vector store status."""
     health_status = await get_system_health()
     
     # Determine HTTP status code based on health
@@ -147,15 +134,12 @@ async def health_check():
 
 @app.get("/health/simple")
 async def simple_health():
-    """Simple health check for load balancers"""
+    """Lightweight liveness probe."""
     return {"status": "ok"}
 
 
-# ============================================================================
 # Import API Routers
-# ============================================================================
 
-# We'll create these router files next
 from app.api.auth import router as auth_router
 from app.api.documents import router as documents_router
 from app.api.chat import router as chat_router
@@ -166,30 +150,9 @@ app.include_router(documents_router, prefix="/api/documents", tags=["Documents"]
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 
 
-# ============================================================================
-# Additional Utility Endpoints
-# ============================================================================
-
-@app.get("/api/config")
-async def get_config():
-    """Get public configuration"""
-    return {
-        "supported_formats": settings.get_supported_formats(),
-        "max_upload_size_mb": settings.MAX_UPLOAD_SIZE_MB,
-        "chunk_size": settings.CHUNK_SIZE,
-        "model": settings.OLLAMA_MODEL,
-        "supported_intents": [
-            "answer_generation",
-            "answer_evaluation",
-            "doubt_clarification",
-            "question_generation"
-        ]
-    }
-
-
 @app.get("/api/stats")
 async def get_stats():
-    """Get system statistics"""
+    """Retrieve vector store and embedding service statistics."""
     from app.services.vector_store_service import get_vector_store
     from app.services.embedding_service import get_embedding_service
     
@@ -202,9 +165,7 @@ async def get_stats():
     }
 
 
-# ============================================================================
 # Static Frontend
-# ============================================================================
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -217,9 +178,7 @@ async def serve_frontend():
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-# ============================================================================
 # Development Server
-# ============================================================================
 
 if __name__ == "__main__":
     uvicorn.run(

@@ -222,9 +222,9 @@ class Settings(BaseSettings):
     # ========================================================================
     
     MAX_UPLOAD_SIZE_MB: int = Field(
-        default=50,
+        default=500,
         ge=1,
-        le=500,
+        le=1024,
         description="Maximum document upload size in MB"
     )
     
@@ -243,7 +243,7 @@ class Settings(BaseSettings):
     )
     
     SUPPORTED_FORMATS: str = Field(
-        default="pdf,docx,txt",
+        default="pdf,docx,txt,pptx",
         description="Comma-separated list of supported file formats"
     )
     
@@ -264,7 +264,7 @@ class Settings(BaseSettings):
     )
     
     SIMILARITY_THRESHOLD: float = Field(
-        default=0.7,
+        default=0.2,
         ge=0.0,
         le=1.0,
         description="Minimum similarity score for retrieval"
@@ -498,13 +498,13 @@ def validate_configuration():
         try:
             import torch
             if not torch.cuda.is_available():
-                print("⚠️  WARNING: CUDA not available, falling back to CPU")
+                print(" WARNING: CUDA not available, falling back to CPU")
                 settings.EMBEDDING_DEVICE = "cpu"
         except ImportError:
-            print("⚠️  WARNING: PyTorch not installed, using CPU")
+            print(" WARNING: PyTorch not installed, using CPU")
             settings.EMBEDDING_DEVICE = "cpu"
     
-    print("✅ Configuration validated successfully")
+    print("Configuration validated successfully")
 
 
 if __name__ == "__main__":
@@ -521,8 +521,8 @@ if __name__ == "__main__":
     for d in dirs:
         print(f"  ✓ {d}")
     
-    print("\n🔍 Validating configuration...")
+    print("\nValidating configuration...")
     try:
         validate_configuration()
     except Exception as e:
-        print(f"❌ Validation failed: {e}")
+        print(f"Validation failed: {e}")

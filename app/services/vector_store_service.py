@@ -67,7 +67,7 @@ class VectorStoreService(LoggerMixin):
         
         count = self.collection.count()
         self.logger.info(
-            f"✅ Vector Store ready | "
+            f"Vector Store ready | "
             f"Documents: {count} | "
             f"Embedding dim: {self.embedding_service.get_embedding_dimension()}"
         )
@@ -96,7 +96,7 @@ class VectorStoreService(LoggerMixin):
                 return client
                 
             except Exception as e:
-                self.logger.error(f"❌ Failed to initialize ChromaDB: {str(e)}", exc_info=True)
+                self.logger.error(f"Failed to initialize ChromaDB: {str(e)}", exc_info=True)
                 raise VectorStoreConnectionException(
                     reason=f"ChromaDB initialization failed",
                     original_exception=e
@@ -114,7 +114,7 @@ class VectorStoreService(LoggerMixin):
                 return collection
                 
             except Exception as e:
-                self.logger.error(f"❌ Collection operation failed: {str(e)}", exc_info=True)
+                self.logger.error(f"Collection operation failed: {str(e)}", exc_info=True)
                 raise VectorStoreConnectionException(
                     reason="Collection creation/retrieval failed",
                     original_exception=e
@@ -140,7 +140,7 @@ class VectorStoreService(LoggerMixin):
             List of document IDs
         """
         if not documents:
-            self.logger.warning("⚠️ No documents to add")
+            self.logger.warning("No documents to add")
             return []
         
         # Generate IDs if not provided
@@ -152,7 +152,7 @@ class VectorStoreService(LoggerMixin):
             metadatas = [{} for _ in documents]
         
         self.logger.info(
-            f"📝 Adding {len(documents)} documents | "
+            f"Adding {len(documents)} documents | "
             f"Batch size: {batch_size}"
         )
         
@@ -183,14 +183,14 @@ class VectorStoreService(LoggerMixin):
                     )
                 
                 self.logger.info(
-                    f"✅ Added {len(documents)} documents | "
+                    f"Added {len(documents)} documents | "
                     f"Total in collection: {self.collection.count()}"
                 )
                 
                 return ids
                 
             except Exception as e:
-                self.logger.error(f"❌ Failed to add documents: {str(e)}", exc_info=True)
+                self.logger.error(f"Failed to add documents: {str(e)}", exc_info=True)
                 raise VectorStoreConnectionException(
                     reason="Document addition failed",
                     original_exception=e
@@ -218,7 +218,7 @@ class VectorStoreService(LoggerMixin):
             Search results with documents, metadata, and distances
         """
         self.logger.debug(
-            f"🔍 Searching | Query: '{query[:100]}' | "
+            f"Searching | Query: '{query[:100]}' | "
             f"Results: {n_results}"
         )
         
@@ -238,7 +238,7 @@ class VectorStoreService(LoggerMixin):
                 
                 num_results = len(results.get('ids', [[]])[0])
                 self.logger.info(
-                    f"✅ Search complete | Found {num_results} results"
+                    f"Search complete | Found {num_results} results"
                 )
                 
                 # Format results
@@ -247,7 +247,7 @@ class VectorStoreService(LoggerMixin):
                 return formatted_results
                 
             except Exception as e:
-                self.logger.error(f"❌ Search failed: {str(e)}", exc_info=True)
+                self.logger.error(f"Search failed: {str(e)}", exc_info=True)
                 raise VectorSearchException(
                     query=query[:100],
                     original_exception=e
@@ -299,7 +299,7 @@ class VectorStoreService(LoggerMixin):
         Returns:
             Matching documents
         """
-        self.logger.debug(f"🔍 Metadata search | Filter: {metadata_filter}")
+        self.logger.debug(f"Metadata search | Filter: {metadata_filter}")
         
         try:
             results = self.collection.get(
@@ -311,7 +311,7 @@ class VectorStoreService(LoggerMixin):
             return self._format_get_results(results)
             
         except Exception as e:
-            self.logger.error(f"❌ Metadata search failed: {str(e)}", exc_info=True)
+            self.logger.error(f"Metadata search failed: {str(e)}", exc_info=True)
             raise VectorSearchException(
                 query=str(metadata_filter),
                 original_exception=e
@@ -347,15 +347,15 @@ class VectorStoreService(LoggerMixin):
         Returns:
             True if successful
         """
-        self.logger.info(f"🗑️ Deleting {len(ids)} documents")
+        self.logger.info(f"Deleting {len(ids)} documents")
         
         try:
             self.collection.delete(ids=ids)
-            self.logger.info(f"✅ Deleted {len(ids)} documents")
+            self.logger.info(f"Deleted {len(ids)} documents")
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Delete failed: {str(e)}", exc_info=True)
+            self.logger.error(f"Delete failed: {str(e)}", exc_info=True)
             return False
     
     def update_metadata(
@@ -373,18 +373,18 @@ class VectorStoreService(LoggerMixin):
         Returns:
             True if successful
         """
-        self.logger.info(f"🔄 Updating metadata for {len(ids)} documents")
+        self.logger.info(f"Updating metadata for {len(ids)} documents")
         
         try:
             self.collection.update(
                 ids=ids,
                 metadatas=metadatas
             )
-            self.logger.info(f"✅ Updated metadata for {len(ids)} documents")
+            self.logger.info(f"Updated metadata for {len(ids)} documents")
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Metadata update failed: {str(e)}", exc_info=True)
+            self.logger.error(f"Metadata update failed: {str(e)}", exc_info=True)
             return False
     
     def get_document_count(self) -> int:
@@ -406,16 +406,16 @@ class VectorStoreService(LoggerMixin):
         Delete all documents in collection
         WARNING: This is irreversible!
         """
-        self.logger.warning("⚠️ Resetting collection - all data will be deleted!")
+        self.logger.warning("Resetting collection - all data will be deleted!")
         
         try:
             self.client.delete_collection(self.collection_name)
             self.collection = self._get_or_create_collection()
-            self.logger.info("✅ Collection reset complete")
+            self.logger.info("Collection reset complete")
             return True
             
         except Exception as e:
-            self.logger.error(f"❌ Reset failed: {str(e)}", exc_info=True)
+            self.logger.error(f"Reset failed: {str(e)}", exc_info=True)
             return False
 
 
@@ -461,15 +461,15 @@ if __name__ == "__main__":
     ]
     
     ids = vector_store.add_documents(documents, metadatas)
-    print(f"✅ Added {len(ids)} documents")
+    print(f"Added {len(ids)} documents")
     
     # Search
     results = vector_store.search("What is deep learning?", n_results=2)
-    print(f"\n🔍 Search results:")
+    print(f"\nSearch results:")
     for result in results['results']:
         print(f"  - {result['document'][:80]}...")
         print(f"    Similarity: {result['similarity']:.4f}")
     
     # Get stats
     stats = vector_store.get_stats()
-    print(f"\n📊 Stats: {stats}")
+    print(f"\nStats: {stats}")

@@ -21,14 +21,13 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-# ============================================================================
 # Request/Response Models
-# ============================================================================
 
 class ChatRequest(BaseModel):
     """Chat request model"""
     query: str
     conversation_id: Optional[int] = None
+    active_document_ids: Optional[List[int]] = None
 
 
 class ChatResponse(BaseModel):
@@ -52,13 +51,15 @@ class ConversationResponse(BaseModel):
 
 
 class RenameRequest(BaseModel):
-    """Rename conversation request"""
+    """Conversation rename request."""
     title: str
 
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
+class ModelRequest(BaseModel):
+    """LLM model selection request."""
+    model: str
+
+
 
 def get_db():
     """Get database connection"""
@@ -141,9 +142,35 @@ def save_message(
     conn.close()
 
 
-# ============================================================================
 # API Endpoints
-# ============================================================================
+
+@router.get("/models")
+async def list_models(
+    current_user: dict = Depends(get_current_user),
+    llm_service: OllamaLLMService = Depends(get_llm_service)
+):
+    """List available Ollama models and the currently active one."""
+    try:
+        response = await llm_service.client.get(f"{llm_service.base_url}/api/tags")
+        if response.status_code == 200:
+            models = [m.get("name", "") for m in response.json().get("models", [])]
+            return {"models": models, "active": llm_service.model}
+    except Exception as e:
+        logger.warning(f"Failed to fetch models: {e}")
+    return {"models": [llm_service.model], "active": llm_service.model}
+
+
+@router.post("/model")
+async def set_model(
+    request: ModelRequest,
+    current_user: dict = Depends(get_current_user),
+    llm_service: OllamaLLMService = Depends(get_llm_service)
+):
+    """Switch the active LLM model for this session."""
+    llm_service.model = request.model
+    logger.info(f"Model changed to {request.model} by user {current_user['id']}")
+    return {"status": "success", "active": llm_service.model}
+
 
 @router.post("/query", response_model=ChatResponse)
 async def process_query(
@@ -155,7 +182,7 @@ async def process_query(
     user_id = current_user["id"]
     query = request.query
     
-    logger.info(f"💬 Processing query | User: {user_id} | Query: '{query[:100]}...'")
+    logger.info(f"Processing query | User: {user_id} | Query: '{query[:100]}...'")
     
     try:
         conversation_id = request.conversation_id
@@ -164,11 +191,30 @@ async def process_query(
             conversation_id = create_conversation(user_id, title=title)
         
         save_message(conversation_id=conversation_id, role="user", content=query)
-        
+        # Fetch History for Contextualization
+        history_dicts = []
+        if conversation_id:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 10",
+                (conversation_id,)
+            )
+            history_rows = cursor.fetchall()[::-1]
+            conn.close()
+            
+            # Exclude current query if it happens to be saved already (though save_message is called just above)
+            if history_rows and history_rows[-1][1] == query:
+                history_rows = history_rows[:-1]
+                
+            history_dicts = [{"role": row[0], "content": row[1]} for row in history_rows]
+
         result = await process_user_query(
             user_id=user_id,
             query=query,
-            conversation_id=conversation_id
+            conversation_id=conversation_id,
+            active_document_ids=request.active_document_ids,
+            conversation_history=history_dicts
         )
         
         if not result["success"]:
@@ -205,7 +251,7 @@ async def process_query(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"❌ Query processing failed: {str(e)}", exc_info=True)
+        logger.error(f"Query processing failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to process query: {str(e)}")
 
 
@@ -247,14 +293,36 @@ async def stream_query(
             
             messages = []
             
-            yield f"data: {json.dumps({'type': 'status', 'message': 'Searching knowledge base...'})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Classifying intent...'})}\n\n"
 
-            # 2. Retrieve Documents (RAG)
             from app.nodes.document_retriever import DocumentRetriever, Intent
             from app.core.state import create_initial_state
+            from app.nodes.intent_classifier import _intent_classifier
             
-            state = create_initial_state(user_id=user_id, query=query)
-            state["intent"] = Intent.DOUBT_CLARIFICATION
+            # Exclude the CURRENT user message from history we pass to context rewriter
+            # (it was saved just before this function ran, so it would be the last row)
+            if history_rows and history_rows[-1][1] == query:
+                context_history_rows = history_rows[:-1]
+            else:
+                context_history_rows = history_rows
+                
+            history_dicts = [{"role": row[0], "content": row[1]} for row in context_history_rows]
+
+            state = create_initial_state(
+                user_id=user_id, 
+                query=query, 
+                conversation_id=conversation_id,
+                active_document_ids=request.active_document_ids,
+                conversation_history=history_dicts
+            )
+            
+            # 1.5 Classify Intent
+            state = await _intent_classifier.classify(state)
+            intent = state["intent"]
+            
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Searching knowledge base...'})}\n\n"
+            
+            # 2. Retrieve Documents (RAG)
             
             retriever = DocumentRetriever()
             await retriever.retrieve(state)
@@ -265,28 +333,61 @@ async def stream_query(
             if retrieved_docs:
                 yield f"data: {json.dumps({'type': 'info', 'message': f'Found {len(retrieved_docs)} relevant notes'})}\n\n"
             else:
-                yield f"data: {json.dumps({'type': 'info', 'message': 'Using general knowledge'})}\n\n"
+                yield f"data: {json.dumps({'type': 'info', 'message': 'No documents found. Rejecting query.'})}\n\n"
 
             yield f"data: {json.dumps({'type': 'status', 'message': 'Thinking...'})}\n\n"
             
             # 3. Build System Prompt & Messages
-            from app.nodes.doubt_resolver import (
+            from app.core.prompts import (
                 DOUBT_RESOLVER_SYSTEM,
-                DOUBT_RESOLVER_GENERAL_SYSTEM
+                DOUBT_RESOLVER_GENERAL_SYSTEM,
+                QUESTION_GEN_SYSTEM,
+                ANSWER_GEN_SYSTEM,
+                ANSWER_GEN_MARKING_SCHEME,
+                ANSWER_GEN_NOTES_ONLY
             )
             
-            if context:
-                system_prompt_text = DOUBT_RESOLVER_SYSTEM
-                final_query = f"Context information is below.\n---------------------\n{context}\n---------------------\nGiven the context information and not prior knowledge, answer the query.\nQuery: {query}"
-                encoded_source = "notes"
-            else:
-                system_prompt_text = DOUBT_RESOLVER_GENERAL_SYSTEM
-                final_query = query
-                encoded_source = "general_knowledge"
+            if intent == Intent.QUESTION_GENERATION:
+                system_prompt_text = QUESTION_GEN_SYSTEM
+                if context:
+                    final_query = f"The user has requested questions based on their uploaded notes. Generate questions exactly matching their request.\n\nUser Request: {query}\n\nNotes Context:\n{context}\n\nStrictly formulate the questions based on the notes above."
+                    encoded_source = "notes"
+                else:
+                    final_query = f"The user has requested questions, but no documents were found. Respond by saying you can only generate questions based on uploaded study materials."
+                    encoded_source = "rejected"
+            elif intent == Intent.EXAM_PAPER_GENERATION:
+                system_prompt_text = QUESTION_GEN_SYSTEM
+                if context:
+                    final_query = f"The user wants to generate a full exam paper. Create a complete exam paper with questions covering different topics and mark weightings.\n\nUser Request: {query}\n\nNotes Context:\n{context}\n\nGenerate a structured exam paper based on the notes above."
+                    encoded_source = "notes"
+                else:
+                    final_query = f"No documents found. Inform the user that you need uploaded notes to generate an exam paper."
+                    encoded_source = "rejected"
+            elif intent in (Intent.ANSWER_GENERATION, Intent.ANSWER_EVALUATION):
+                system_prompt_text = ANSWER_GEN_SYSTEM
+                if context:
+                    doc_types = state.get("document_types_available", [])
+                    if "marking_scheme" in doc_types:
+                        final_query = ANSWER_GEN_MARKING_SCHEME.format(question=query, context=context)
+                    else:
+                        final_query = ANSWER_GEN_NOTES_ONLY.format(question=query, context=context)
+                    encoded_source = "notes"
+                else:
+                    final_query = f"The user has asked a question, but no documents were found. Respond by saying you can only generate answers based on uploaded study materials."
+                    encoded_source = "rejected"
+            else:  # DOUBT_CLARIFICATION or fallback
+                if context:
+                    system_prompt_text = DOUBT_RESOLVER_SYSTEM
+                    final_query = f"Context information is below.\n---------------------\n{context}\n---------------------\nGiven the context information and not prior knowledge, answer the query.\nQuery: {query}"
+                    encoded_source = "notes"
+                else:
+                    system_prompt_text = DOUBT_RESOLVER_GENERAL_SYSTEM
+                    final_query = f"I'm sorry, I was unable to find relevant information in your uploaded documents to answer this question: \"{query}\". Please make sure you have uploaded the correct study materials, and check that they are active."
+                    encoded_source = "rejected"
 
             messages.append({"role": "system", "content": system_prompt_text})
             
-            # Add history (exclude current message)
+            # Add conversation history (exclude current message to avoid duplication)
             if history_rows and history_rows[-1][1] == query:
                 history_rows = history_rows[:-1]
                 
@@ -300,7 +401,7 @@ async def stream_query(
             async for chunk in llm_service.chat_stream(
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1500
+                max_tokens=2500
             ):
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
@@ -310,65 +411,15 @@ async def stream_query(
                 conversation_id=conversation_id,
                 role="assistant",
                 content=full_response,
-                intent="doubt_clarification",
+                intent=intent.value,
                 metadata={"source": encoded_source, "streamed": True}
             )
-            
-            # 6. Generate follow-up suggestions
-            try:
-                suggestion_prompt = f"""Given this student question and answer, generate 3 brief follow-up questions. Output ONLY a JSON array.
-
-Q: {query[:200]}
-A: {full_response[:300]}
-
-Output:"""
-                
-                suggestion_response = ""
-                async for chunk in llm_service.generate_stream(
-                    prompt=suggestion_prompt,
-                    temperature=0.3,
-                    max_tokens=150
-                ):
-                    suggestion_response += chunk
-                
-                logger.info(f"📝 Suggestion raw: {suggestion_response[:200]}")
-                
-                # Try multiple JSON extraction strategies
-                suggestions = None
-                import re
-                
-                # Strategy 1: Find JSON array directly
-                json_match = re.search(r'\[.*?\]', suggestion_response, re.DOTALL)
-                if json_match:
-                    try:
-                        suggestions = json.loads(json_match.group())
-                    except json.JSONDecodeError:
-                        pass
-                
-                # Strategy 2: Extract quoted strings manually
-                if not suggestions:
-                    quoted = re.findall(r'"([^"]{5,80})"', suggestion_response)
-                    if len(quoted) >= 2:
-                        suggestions = quoted[:3]
-                
-                if suggestions and isinstance(suggestions, list) and len(suggestions) >= 2:
-                    # Filter to only strings
-                    suggestions = [str(s).strip() for s in suggestions if isinstance(s, str) and len(s.strip()) > 5][:3]
-                    if suggestions:
-                        yield f"data: {json.dumps({'type': 'suggestions', 'questions': suggestions})}\n\n"
-                        logger.info(f"✅ Suggestions: {suggestions}")
-                    else:
-                        logger.warning("Suggestions filtered to empty")
-                else:
-                    logger.warning(f"Could not parse suggestions from: {suggestion_response[:100]}")
-            except Exception as e:
-                logger.warning(f"Failed to generate suggestions: {e}")
             
             # Final event
             yield f"data: {json.dumps({'type': 'done', 'conversation_id': conversation_id})}\n\n"
             
         except Exception as e:
-            logger.error(f"❌ Streaming failed: {e}", exc_info=True)
+            logger.error(f"Streaming failed: {e}", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -560,10 +611,6 @@ async def delete_conversation(
     conn.commit()
     conn.close()
     
-    logger.info(f"🗑️ Conversation deleted | ID: {conversation_id}")
+    logger.info(f"Conversation deleted | ID: {conversation_id}")
     
     return {"message": "Conversation deleted successfully", "conversation_id": conversation_id}
-
-
-if __name__ == "__main__":
-    print("Chat API Router")

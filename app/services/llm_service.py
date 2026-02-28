@@ -67,7 +67,7 @@ class OllamaLLMService(LoggerMixin):
         )
         
         self.logger.info(
-            f"🤖 Initialized LLM Service | Model: {self.model} | URL: {self.base_url}"
+            f"Initialized LLM Service | Model: {self.model} | URL: {self.base_url}"
         )
     
     async def __aenter__(self):
@@ -81,7 +81,7 @@ class OllamaLLMService(LoggerMixin):
     async def close(self):
         """Close HTTP client"""
         await self.client.aclose()
-        self.logger.info("🔌 LLM Service closed")
+        self.logger.info("LLM Service closed")
     
     @retry_with_backoff(
         max_retries=3,
@@ -118,11 +118,11 @@ class OllamaLLMService(LoggerMixin):
                 
                 if not model_found:
                     self.logger.error(
-                        f"❌ Model '{self.model}' not found. Available: {model_names}"
+                        f"Model '{self.model}' not found. Available: {model_names}"
                     )
                     raise LLMModelNotFoundException(model_name=self.model)
                 
-                self.logger.info(f"✅ Model '{self.model}' is available")
+                self.logger.info(f"Model '{self.model}' is available")
                 return True
                 
             except httpx.ConnectError as e:
@@ -189,7 +189,7 @@ class OllamaLLMService(LoggerMixin):
                 )
                 
                 self.logger.info(
-                    f"✅ Generated response | "
+                    f"Generated response | "
                     f"Length: {len(result)} chars",
                     extra=context
                 )
@@ -198,7 +198,7 @@ class OllamaLLMService(LoggerMixin):
                 
             except Exception as e:
                 self.logger.error(
-                    f"❌ Generation failed | Error: {str(e)}",
+                    f"Generation failed | Error: {str(e)}",
                     exc_info=True,
                     extra=context
                 )
@@ -315,7 +315,7 @@ class OllamaLLMService(LoggerMixin):
             )
         except Exception as e:
             self.logger.warning(
-                f"⚠️ Generation failed, using fallback | Error: {str(e)}"
+                f"Generation failed, using fallback | Error: {str(e)}"
             )
             
             if fallback_response:
@@ -431,7 +431,7 @@ class OllamaLLMService(LoggerMixin):
                             
         except Exception as e:
             self.logger.error(
-                f"❌ Streaming failed | Error: {str(e)}",
+                f"Streaming failed | Error: {str(e)}",
                 exc_info=True,
                 extra=context
             )
@@ -525,7 +525,7 @@ if __name__ == "__main__":
                 max_tokens=100
             )
             
-            print(f"\n✅ Response:\n{response}\n")
+            print(f"\nResponse:\n{response}\n")
             
             # Test chat
             messages = [
@@ -536,6 +536,6 @@ if __name__ == "__main__":
             ]
             
             chat_response = await llm.chat(messages, max_tokens=50)
-            print(f"\n✅ Chat Response:\n{chat_response}\n")
+            print(f"\nChat Response:\n{chat_response}\n")
     
     asyncio.run(test())

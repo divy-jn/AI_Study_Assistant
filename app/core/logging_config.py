@@ -188,9 +188,9 @@ def setup_logging(
     logging.getLogger("chromadb").setLevel(logging.WARNING)
     logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
     
-    root_logger.info("✅ Logging system initialized")
+    root_logger.info("Logging system initialized")
     root_logger.info(f"📁 Log directory: {log_path.absolute()}")
-    root_logger.info(f"📊 Log level: {log_level}")
+    root_logger.info(f"Log level: {log_level}")
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -229,7 +229,7 @@ class LogExecutionTime:
     
     def __enter__(self):
         self.start_time = datetime.now()
-        self.logger.debug(f"⏱️  Starting: {self.operation}")
+        self.logger.debug(f" Starting: {self.operation}")
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -239,13 +239,13 @@ class LogExecutionTime:
             # Success
             self.logger.log(
                 self.log_level,
-                f"✅ Completed: {self.operation}",
+                f"Completed: {self.operation}",
                 extra={'execution_time': execution_time}
             )
         else:
             # Exception occurred
             self.logger.error(
-                f"❌ Failed: {self.operation}",
+                f"Failed: {self.operation}",
                 exc_info=(exc_type, exc_val, exc_tb),
                 extra={'execution_time': execution_time}
             )
@@ -279,7 +279,7 @@ def log_function_call(log_args: bool = False, log_result: bool = False):
                 result = func(*args, **kwargs)
                 execution_time = (datetime.now() - start_time).total_seconds()
                 
-                log_msg = f"✅ Completed: {func_name}"
+                log_msg = f"Completed: {func_name}"
                 if log_result:
                     log_msg += f" | Result: {result}"
                 
@@ -290,7 +290,7 @@ def log_function_call(log_args: bool = False, log_result: bool = False):
             except Exception as e:
                 execution_time = (datetime.now() - start_time).total_seconds()
                 logger.error(
-                    f"❌ Failed: {func_name} | Error: {str(e)}",
+                    f"Failed: {func_name} | Error: {str(e)}",
                     exc_info=True,
                     extra={'execution_time': execution_time}
                 )
@@ -316,4 +316,4 @@ if __name__ == "__main__":
         import time
         time.sleep(0.5)
     
-    print("\n✅ Logging test complete! Check logs/ directory")
+    print("\nLogging test complete! Check logs/ directory")

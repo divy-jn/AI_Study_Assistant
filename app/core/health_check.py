@@ -457,7 +457,7 @@ class SystemHealthMonitor:
         }
         
         logger.info(
-            f"✅ Health check complete | "
+            f"Health check complete | "
             f"Overall: {overall_status.value} | "
             f"Healthy: {status_counts[HealthStatus.HEALTHY]}/{len(check_results)}"
         )

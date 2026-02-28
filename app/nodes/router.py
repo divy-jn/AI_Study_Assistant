@@ -30,7 +30,7 @@ def route_after_intent(state: GraphState) -> Literal[
     """
     intent = state.get("intent", Intent.DOUBT_CLARIFICATION)
     
-    logger.info(f"🔀 Routing based on intent: {intent.value}")
+    logger.info(f"Routing based on intent: {intent.value}")
     
     # All intents need document retrieval first (except general chat)
     if intent == Intent.GENERAL_CHAT:
@@ -57,7 +57,7 @@ def route_after_retrieval(state: GraphState) -> Literal[
     """
     intent = state.get("intent", Intent.DOUBT_CLARIFICATION)
     
-    logger.info(f"🔀 Routing to task node: {intent.value}")
+    logger.info(f"Routing to task node: {intent.value}")
     
     # Route based on intent
     if intent == Intent.ANSWER_GENERATION:
@@ -93,20 +93,3 @@ def should_continue(state: GraphState) -> Literal["end", "continue"]:
     
     return "continue"
 
-
-if __name__ == "__main__":
-    from langgraph_state import create_initial_state, Intent
-    
-    # Test routing
-    state1 = create_initial_state(1, "Generate answer")
-    state1["intent"] = Intent.ANSWER_GENERATION
-    
-    print(f"Intent: {state1['intent'].value}")
-    print(f"After intent: {route_after_intent(state1)}")
-    print(f"After retrieval: {route_after_retrieval(state1)}")
-    
-    state2 = create_initial_state(1, "Evaluate my answer")
-    state2["intent"] = Intent.ANSWER_EVALUATION
-    
-    print(f"\nIntent: {state2['intent'].value}")
-    print(f"After retrieval: {route_after_retrieval(state2)}")

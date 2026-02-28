@@ -69,7 +69,7 @@ class QuestionGenerator:
         doc_types = state.get("document_types_available", [])
         
         self.logger.info(
-            f"📝 Generating questions | "
+            f"Generating questions | "
             f"Query: '{query[:100]}'"
         )
         
@@ -77,7 +77,7 @@ class QuestionGenerator:
             try:
                 # Check if we have notes
                 if not context or "notes" not in doc_types:
-                    self.logger.warning("⚠️ No notes available for question generation")
+                    self.logger.warning("No notes available for question generation")
                     raise MissingDocumentsException(
                         required_types=["notes"],
                         available_types=doc_types
@@ -106,7 +106,7 @@ class QuestionGenerator:
                 state["nodes_visited"].append("question_generator")
                 
                 self.logger.info(
-                    f"✅ Generated {len(questions)} questions | "
+                    f"Generated {len(questions)} questions | "
                     f"Type: {request['type']} | "
                     f"Difficulty: {request['difficulty']}"
                 )
@@ -114,7 +114,7 @@ class QuestionGenerator:
                 return state
                 
             except Exception as e:
-                self.logger.error(f"❌ Question generation failed: {str(e)}", exc_info=True)
+                self.logger.error(f"Question generation failed: {str(e)}", exc_info=True)
                 raise WorkflowNodeException(
                     node_name="question_generator",
                     reason=str(e),

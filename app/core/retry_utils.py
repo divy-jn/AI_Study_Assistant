@@ -58,7 +58,7 @@ class CircuitBreaker:
         
         if self.state == CircuitState.OPEN:
             if self._should_attempt_reset():
-                logger.info(f"🔄 Circuit breaker for {func.__name__} entering HALF_OPEN state")
+                logger.info(f"Circuit breaker for {func.__name__} entering HALF_OPEN state")
                 self.state = CircuitState.HALF_OPEN
             else:
                 raise Exception(f"Circuit breaker is OPEN for {func.__name__}")
@@ -83,7 +83,7 @@ class CircuitBreaker:
         """Handle successful call"""
         self.failure_count = 0
         if self.state == CircuitState.HALF_OPEN:
-            logger.info("✅ Circuit breaker recovered, state: CLOSED")
+            logger.info("Circuit breaker recovered, state: CLOSED")
             self.state = CircuitState.CLOSED
     
     def _on_failure(self):
@@ -93,7 +93,7 @@ class CircuitBreaker:
         
         if self.failure_count >= self.failure_threshold:
             logger.error(
-                f"⚠️ Circuit breaker OPENED after {self.failure_count} failures"
+                f"Circuit breaker OPENED after {self.failure_count} failures"
             )
             self.state = CircuitState.OPEN
 
@@ -138,13 +138,13 @@ def retry_with_backoff(
                     
                     if attempt == max_retries:
                         logger.error(
-                            f"❌ {func.__name__} failed after {max_retries} retries",
+                            f"{func.__name__} failed after {max_retries} retries",
                             exc_info=True
                         )
                         raise
                     
                     logger.warning(
-                        f"🔄 Retry {attempt + 1}/{max_retries} for {func.__name__} "
+                        f"Retry {attempt + 1}/{max_retries} for {func.__name__} "
                         f"after {delay:.2f}s | Error: {str(e)}"
                     )
                     
@@ -170,13 +170,13 @@ def retry_with_backoff(
                     
                     if attempt == max_retries:
                         logger.error(
-                            f"❌ {func.__name__} failed after {max_retries} retries",
+                            f"{func.__name__} failed after {max_retries} retries",
                             exc_info=True
                         )
                         raise
                     
                     logger.warning(
-                        f"🔄 Retry {attempt + 1}/{max_retries} for {func.__name__} "
+                        f"Retry {attempt + 1}/{max_retries} for {func.__name__} "
                         f"after {delay:.2f}s | Error: {str(e)}"
                     )
                     
@@ -227,20 +227,20 @@ class FallbackChain:
         for i, strategy in enumerate(self.strategies):
             try:
                 logger.info(
-                    f"🎯 {self.name}: Trying strategy {i + 1}/{len(self.strategies)} - {strategy.__name__}"
+                    f"{self.name}: Trying strategy {i + 1}/{len(self.strategies)} - {strategy.__name__}"
                 )
                 result = strategy(*args, **kwargs)
-                logger.info(f"✅ {self.name}: Strategy {i + 1} succeeded")
+                logger.info(f"{self.name}: Strategy {i + 1} succeeded")
                 return result
                 
             except Exception as e:
                 last_exception = e
                 logger.warning(
-                    f"⚠️ {self.name}: Strategy {i + 1} failed - {str(e)}"
+                    f"{self.name}: Strategy {i + 1} failed - {str(e)}"
                 )
                 
                 if i == len(self.strategies) - 1:
-                    logger.error(f"❌ {self.name}: All strategies failed")
+                    logger.error(f"{self.name}: All strategies failed")
                     raise
         
         raise last_exception
@@ -252,7 +252,7 @@ class FallbackChain:
         for i, strategy in enumerate(self.strategies):
             try:
                 logger.info(
-                    f"🎯 {self.name}: Trying strategy {i + 1}/{len(self.strategies)} - {strategy.__name__}"
+                    f"{self.name}: Trying strategy {i + 1}/{len(self.strategies)} - {strategy.__name__}"
                 )
                 
                 if asyncio.iscoroutinefunction(strategy):
@@ -260,17 +260,17 @@ class FallbackChain:
                 else:
                     result = strategy(*args, **kwargs)
                 
-                logger.info(f"✅ {self.name}: Strategy {i + 1} succeeded")
+                logger.info(f"{self.name}: Strategy {i + 1} succeeded")
                 return result
                 
             except Exception as e:
                 last_exception = e
                 logger.warning(
-                    f"⚠️ {self.name}: Strategy {i + 1} failed - {str(e)}"
+                    f"{self.name}: Strategy {i + 1} failed - {str(e)}"
                 )
                 
                 if i == len(self.strategies) - 1:
-                    logger.error(f"❌ {self.name}: All strategies failed")
+                    logger.error(f"{self.name}: All strategies failed")
                     raise
         
         raise last_exception
@@ -292,14 +292,14 @@ def with_timeout(timeout_seconds: int):
                     timeout=timeout_seconds
                 )
             except asyncio.TimeoutError:
-                logger.error(f"⏱️ {func.__name__} timed out after {timeout_seconds}s")
+                logger.error(f"{func.__name__} timed out after {timeout_seconds}s")
                 raise LLMTimeoutException(timeout_seconds)
         
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
             # For sync functions, we can't enforce timeout easily
             # Just log and call the function
-            logger.debug(f"⏱️ {func.__name__} timeout set to {timeout_seconds}s (warning only)")
+            logger.debug(f"{func.__name__} timeout set to {timeout_seconds}s (warning only)")
             return func(*args, **kwargs)
         
         if asyncio.iscoroutinefunction(func):
@@ -347,15 +347,15 @@ class SafeExecutor:
                 return func(*args, **kwargs)
                 
         except Exception as e:
-            logger.error(f"❌ SafeExecutor: Execution failed - {str(e)}")
+            logger.error(f"SafeExecutor: Execution failed - {str(e)}")
             
             # Try fallback if configured
             if self.fallback:
-                logger.info("🔄 SafeExecutor: Attempting fallback")
+                logger.info("SafeExecutor: Attempting fallback")
                 try:
                     return self.fallback(*args, **kwargs)
                 except Exception as fallback_error:
-                    logger.error(f"❌ SafeExecutor: Fallback also failed - {str(fallback_error)}")
+                    logger.error(f"SafeExecutor: Fallback also failed - {str(fallback_error)}")
             
             raise
 
@@ -396,7 +396,7 @@ if __name__ == "__main__":
     try:
         test_function()
     except ConnectionError:
-        print("✅ Retry mechanism working correctly")
+        print("Retry mechanism working correctly")
     
     # Test fallback chain
     def strategy1():
@@ -407,4 +407,4 @@ if __name__ == "__main__":
     
     chain = FallbackChain([strategy1, strategy2], name="TestChain")
     result = chain.execute()
-    print(f"✅ Fallback chain result: {result}")
+    print(f"Fallback chain result: {result}")

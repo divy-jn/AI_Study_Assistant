@@ -12,7 +12,7 @@ import uuid
 from app.core.logging_config import get_logger, LogExecutionTime
 from app.core.config import settings
 from app.core.models.document import DocumentResponse, DocumentListResponse, DocumentProcessingStatus
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Depends
+from fastapi import BackgroundTasks
 from app.api.auth import get_current_user
 from app.services.document_processor import get_document_processor, DocumentProcessor
 from app.services.vector_store_service import get_vector_store, VectorStoreService
@@ -27,9 +27,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-# ============================================================================
 # Helper Functions
-# ============================================================================
 
 def get_db():
     """Get database connection"""
@@ -128,9 +126,7 @@ def _update_document_processing_status(
     conn.close()
 
 
-# ============================================================================
 # API Endpoints
-# ============================================================================
 
 @router.post("/upload", response_model=DocumentResponse)
 async def upload_document(
@@ -160,7 +156,7 @@ async def upload_document(
     user_id = current_user["id"]
     
     logger.info(
-        f"📤 Document upload | "
+        f"Document upload | "
         f"User: {user_id} | "
         f"File: {file.filename} | "
         f"Type: {document_type}"
@@ -205,7 +201,7 @@ async def upload_document(
             user_id=current_user["id"]
         )
         
-        logger.info(f"✅ Document metadata saved | ID: {document_id}")
+        logger.info(f"Document metadata saved | ID: {document_id}")
         
         # Process document
         with LogExecutionTime(logger, f"Document processing: {document_id}"):
@@ -235,7 +231,7 @@ async def upload_document(
             
             _update_document_processing_status(document_id, True, len(processed_doc.chunks))
             logger.info(
-                f"✅ Document processed and indexed | "
+                f"Document processed and indexed | "
                 f"ID: {document_id} | "
                 f"Chunks: {len(processed_doc.chunks)}"
             )
@@ -252,7 +248,7 @@ async def upload_document(
     except (InvalidDocumentFormatException, DocumentTooLargeException):
         raise
     except Exception as e:
-        logger.error(f"❌ Document upload failed: {str(e)}", exc_info=True)
+        logger.error(f"Document upload failed: {str(e)}", exc_info=True)
         raise DocumentUploadException(
             filename=file.filename,
             reason=str(e),
@@ -269,7 +265,7 @@ async def process_document_internal(document_id: int, file_path: str, user_id: i
         file_path: Path to document file
         user_id: User ID
     """
-    logger.info(f"🔄 Processing document | ID: {document_id}")
+    logger.info(f"Processing document | ID: {document_id}")
     
     with LogExecutionTime(logger, f"Document processing: {document_id}"):
         try:
@@ -322,13 +318,13 @@ async def process_document_internal(document_id: int, file_path: str, user_id: i
             conn.close()
             
             logger.info(
-                f"✅ Document processed | "
+                f"Document processed | "
                 f"ID: {document_id} | "
                 f"Chunks: {len(parsed_doc.chunks)}"
             )
             
         except Exception as e:
-            logger.error(f"❌ Document processing failed: {str(e)}", exc_info=True)
+            logger.error(f"Document processing failed: {str(e)}", exc_info=True)
             
             # Update document status as failed
             conn = get_db()
@@ -459,7 +455,7 @@ async def delete_document(
         if file_path.exists():
             file_path.unlink()
     except Exception as e:
-        logger.warning(f"⚠️ Failed to delete file: {e}")
+        logger.warning(f"Failed to delete file: {e}")
     
     # Delete from vector store
     try:
@@ -468,14 +464,14 @@ async def delete_document(
         chunk_ids = [f"{document_id}_{i}" for i in range(chunk_count)]
         vector_store.delete_documents(chunk_ids)
     except Exception as e:
-        logger.warning(f"⚠️ Failed to delete from vector store: {e}")
+        logger.warning(f"Failed to delete from vector store: {e}")
     
     # Delete from database
     cursor.execute("DELETE FROM documents WHERE id = ?", (document_id,))
     conn.commit()
     conn.close()
     
-    logger.info(f"🗑️ Document deleted | ID: {document_id}")
+    logger.info(f"Document deleted | ID: {document_id}")
     
     return {
         "message": "Document deleted successfully",

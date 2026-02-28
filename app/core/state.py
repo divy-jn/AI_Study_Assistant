@@ -26,6 +26,10 @@ class GraphState(TypedDict, total=False):
     user_id: int
     conversation_id: Optional[int]
     status: ProcessingStatus
+    conversation_history: List[Dict[str, str]]
+    
+    # Selected Knowledge Base
+    active_document_ids: List[int]
     
     # Input
     query: str
@@ -54,11 +58,13 @@ class GraphState(TypedDict, total=False):
     processing_time: float
     error_message: str
 
-def create_initial_state(user_id: int, query: str, conversation_id: int = None) -> GraphState:
+def create_initial_state(user_id: int, query: str, conversation_id: int = None, active_document_ids: List[int] = None, conversation_history: List[Dict[str, str]] = None) -> GraphState:
     return {
         "user_id": user_id,
         "query": query,
         "conversation_id": conversation_id,
+        "conversation_history": conversation_history or [],
+        "active_document_ids": active_document_ids or [],
         "nodes_visited": [],
         "task_data": {},
         "retrieved_documents": [],

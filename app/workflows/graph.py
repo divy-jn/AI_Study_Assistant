@@ -1,15 +1,14 @@
 """
-LangGraph Workflow - Main Orchestrator
-Defines and compiles the complete workflow graph
+LangGraph workflow orchestration.
+Builds and executes the stateful AI pipeline from intent classification through response generation.
 """
 from langgraph.graph import StateGraph, END
-from typing import Dict, Any
+from typing import Dict, Any, List
 import time
 
 from app.core.state import GraphState, create_initial_state, ProcessingStatus
 from app.core.logging_config import get_logger, LogExecutionTime
 
-# Import all nodes
 from app.nodes.intent_classifier import classify_intent_node
 from app.nodes.document_retriever import retrieve_documents_node
 from app.nodes.answer_generator import generate_answer_node
@@ -17,7 +16,6 @@ from app.nodes.answer_evaluator import evaluate_answer_node
 from app.nodes.doubt_resolver import resolve_doubt_node
 from app.nodes.question_generator import generate_questions_node
 
-# Import router
 from app.nodes.router import route_after_intent, route_after_retrieval
 
 
@@ -25,24 +23,16 @@ logger = get_logger(__name__)
 
 
 class WorkflowOrchestrator:
-    """
-    Main workflow orchestrator using LangGraph
-    Manages the complete educational AI workflow
-    """
+    """Orchestrates the LangGraph pipeline for processing user queries."""
     
     def __init__(self):
         self.logger = logger
         self.graph = self._build_graph()
-        self.logger.info("🎯 LangGraph workflow initialized")
+        self.logger.info("LangGraph workflow initialized")
     
     def _build_graph(self) -> StateGraph:
-        """
-        Build the complete workflow graph
-        
-        Returns:
-            Compiled StateGraph
-        """
-        self.logger.info("🔨 Building workflow graph...")
+        """Construct the state graph with nodes and conditional routing edges."""
+        self.logger.info("Building workflow graph...")
         
         # Initialize graph
         workflow = StateGraph(GraphState)
@@ -89,7 +79,7 @@ class WorkflowOrchestrator:
         # Compile graph
         compiled_graph = workflow.compile()
         
-        self.logger.info("✅ Workflow graph built successfully")
+        self.logger.info("Workflow graph built successfully")
         
         return compiled_graph
     
@@ -97,21 +87,13 @@ class WorkflowOrchestrator:
         self,
         user_id: int,
         query: str,
-        conversation_id: int = None
+        conversation_id: int = None,
+        active_document_ids: List[int] = None,
+        conversation_history: List[Dict[str, str]] = None
     ) -> Dict[str, Any]:
-        """
-        Process a user query through the complete workflow
-        
-        Args:
-            user_id: User ID
-            query: User query
-            conversation_id: Optional conversation ID
-            
-        Returns:
-            Final workflow result with response
-        """
+        """Execute the full workflow pipeline for a user query."""
         self.logger.info(
-            f"🚀 Processing query | "
+            f"Processing query | "
             f"User: {user_id} | "
             f"Query: '{query[:100]}...'"
         )
@@ -123,7 +105,9 @@ class WorkflowOrchestrator:
             initial_state = create_initial_state(
                 user_id=user_id,
                 query=query,
-                conversation_id=conversation_id
+                conversation_id=conversation_id,
+                active_document_ids=active_document_ids,
+                conversation_history=conversation_history
             )
             
             initial_state["status"] = ProcessingStatus.IN_PROGRESS
@@ -141,7 +125,7 @@ class WorkflowOrchestrator:
             response = self._build_response(final_state)
             
             self.logger.info(
-                f"✅ Query processed successfully | "
+                f"Query processed successfully | "
                 f"Intent: {final_state.get('intent', 'unknown')} | "
                 f"Time: {processing_time:.2f}s | "
                 f"Nodes: {len(final_state['nodes_visited'])}"
@@ -151,7 +135,7 @@ class WorkflowOrchestrator:
             
         except Exception as e:
             self.logger.error(
-                f"❌ Workflow execution failed: {str(e)}",
+                f"Workflow execution failed: {str(e)}",
                 exc_info=True
             )
             
@@ -168,15 +152,7 @@ class WorkflowOrchestrator:
             }
     
     def _build_response(self, state: GraphState) -> Dict[str, Any]:
-        """
-        Build final response from workflow state
-        
-        Args:
-            state: Final workflow state
-            
-        Returns:
-            Formatted response dictionary
-        """
+        """Extract and structure the final response from the completed graph state."""
         intent = state.get("intent")
         
         # Base response
@@ -213,12 +189,7 @@ class WorkflowOrchestrator:
         return response
     
     def get_workflow_info(self) -> Dict[str, Any]:
-        """
-        Get information about the workflow structure
-        
-        Returns:
-            Workflow metadata
-        """
+        """Return metadata about the workflow's available nodes and intents."""
         return {
             "nodes": [
                 "classify_intent",
@@ -243,12 +214,7 @@ _workflow_instance = None
 
 
 def get_workflow() -> WorkflowOrchestrator:
-    """
-    Get or create workflow singleton
-    
-    Returns:
-        WorkflowOrchestrator instance
-    """
+    """Return the singleton workflow orchestrator instance."""
     global _workflow_instance
     
     if _workflow_instance is None:
@@ -260,68 +226,16 @@ def get_workflow() -> WorkflowOrchestrator:
 async def process_user_query(
     user_id: int,
     query: str,
-    conversation_id: int = None
+    conversation_id: int = None,
+    active_document_ids: List[int] = None,
+    conversation_history: List[Dict[str, str]] = None
 ) -> Dict[str, Any]:
-    """
-    Convenience function to process a query
-    
-    Args:
-        user_id: User ID
-        query: User query
-        conversation_id: Optional conversation ID
-        
-    Returns:
-        Processing result
-    """
+    """Convenience function to process a query through the workflow."""
     workflow = get_workflow()
-    return await workflow.process_query(user_id, query, conversation_id)
-
-
-if __name__ == "__main__":
-    import asyncio
-    
-    async def test():
-        # Initialize workflow
-        workflow = get_workflow()
-        
-        # Print workflow info
-        info = workflow.get_workflow_info()
-        print("\n📊 Workflow Information:")
-        print(f"Nodes: {info['nodes']}")
-        print(f"Entry Point: {info['entry_point']}")
-        print(f"Supported Intents: {info['supported_intents']}")
-        
-        # Test queries
-        test_queries = [
-            "What is machine learning?",
-            "Generate answer for Q1 using marking scheme",
-            "Evaluate my answer to this question",
-            "Create 3 MCQs on neural networks"
-        ]
-        
-        print("\n" + "="*60)
-        print("TESTING WORKFLOW")
-        print("="*60)
-        
-        for query in test_queries:
-            print(f"\n📝 Query: {query}")
-            
-            try:
-                result = await process_user_query(
-                    user_id=1,
-                    query=query
-                )
-                
-                print(f"✅ Intent: {result['intent']}")
-                print(f"⏱️  Time: {result['processing_time']:.2f}s")
-                print(f"🔀 Nodes: {' → '.join(result['nodes_visited'])}")
-                
-                if result.get('response'):
-                    print(f"📄 Response preview: {result['response'][:150]}...")
-                
-            except Exception as e:
-                print(f"❌ Error: {str(e)}")
-            
-            print("-" * 60)
-    
-    asyncio.run(test())
+    return await workflow.process_query(
+        user_id=user_id,
+        query=query,
+        conversation_id=conversation_id,
+        active_document_ids=active_document_ids,
+        conversation_history=conversation_history
+    )

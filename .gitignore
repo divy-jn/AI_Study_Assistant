@@ -5,7 +5,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -25,6 +24,7 @@ wheels/
 # Virtual Environment
 venv/
 .venv/
+.venv_cuda/
 env/
 
 # Environment Variables
@@ -51,7 +51,7 @@ logs/
 .coverage
 htmlcov/
 
-# Node/JS (if project expands to use npm via package.json later)
+# Node/JS
 node_modules/
 npm-debug.log
 yarn-error.log
@@ -60,5 +60,13 @@ yarn-error.log
 .DS_Store
 Thumbs.db
 
-# Project Reports
-# Keep reports in version control, but maybe ignore temporary drafts if any
+# Extra documentation (not project code)
+docs/
+text_documentation/
+server_log.txt
+
+# Test/utility scripts (not project code)
+test_*.py
+check_model.py
+verify_model.py
+scripts/clean_comments.py

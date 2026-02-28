@@ -51,7 +51,7 @@ class AnswerGenerator:
             try:
                 # Check if we have necessary documents
                 if not context:
-                    self.logger.warning("⚠️ No context available for answer generation")
+                    self.logger.warning("No context available for answer generation")
                     raise MissingDocumentsException(
                         required_types=["marking_scheme", "notes"],
                         available_types=doc_types
@@ -96,14 +96,14 @@ class AnswerGenerator:
                 state["nodes_visited"].append("answer_generator")
                 
                 self.logger.info(
-                    f"✅ Answer generated | "
+                    f"Answer generated | "
                     f"Length: {len(formatted_answer)} chars"
                 )
                 
                 return state
                 
             except Exception as e:
-                self.logger.error(f"❌ Answer generation failed: {str(e)}", exc_info=True)
+                self.logger.error(f"Answer generation failed: {str(e)}", exc_info=True)
                 raise WorkflowNodeException(
                     node_name="answer_generator",
                     reason=str(e),

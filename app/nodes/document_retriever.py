@@ -56,7 +56,7 @@ class DocumentRetriever:
         user_id = state["user_id"]
         
         self.logger.info(
-            f"🔍 Retrieving documents | "
+            f"Retrieving documents | "
             f"Intent: {intent.value} | "
             f"Query: '{query[:100]}'"
         )
@@ -67,16 +67,34 @@ class DocumentRetriever:
                 if self.vector_store is None:
                     self.vector_store = get_vector_store()
                 
-                # Build enhanced query based on intent
-                enhanced_query = self._enhance_query(query, intent)
+                # Build enhanced query based on intent and history
+                history = state.get("conversation_history", [])
+                enhanced_query = await self._enhance_query(query, intent, history)
                 
                 # Determine how many documents to retrieve
                 n_results = self.RETRIEVAL_COUNTS.get(intent, 10)
+                
+                # Handle Active Documents Filtering
+                active_doc_ids = state.get("active_document_ids")
+                
+                # If explicit empty list provided, skip retrieval entirely
+                if active_doc_ids is not None and len(active_doc_ids) == 0:
+                    self.logger.info("No active documents selected. Skipping retrieval.")
+                    state["retrieved_documents"] = []
+                    state["context"] = ""
+                    state["document_types_available"] = []
+                    state["nodes_visited"].append("document_retriever")
+                    return state
+                    
+                where_filter = None
+                if active_doc_ids:
+                    where_filter = {"document_id": {"$in": active_doc_ids}}
                 
                 # Perform semantic search
                 search_results = self.vector_store.search(
                     query=enhanced_query,
                     n_results=n_results * 2,  # Retrieve more, then filter
+                    where=where_filter,
                     include=["documents", "metadatas", "distances"]
                 )
                 
@@ -105,7 +123,7 @@ class DocumentRetriever:
                 state["nodes_visited"].append("document_retriever")
                 
                 self.logger.info(
-                    f"✅ Retrieved {len(retrieved_docs)} documents | "
+                    f"Retrieved {len(retrieved_docs)} documents | "
                     f"Types: {doc_types} | "
                     f"Context length: {len(context)} chars"
                 )
@@ -113,7 +131,7 @@ class DocumentRetriever:
                 return state
                 
             except Exception as e:
-                self.logger.error(f"❌ Document retrieval failed: {str(e)}", exc_info=True)
+                self.logger.error(f"Document retrieval failed: {str(e)}", exc_info=True)
                 
                 # Set empty results instead of failing
                 state["retrieved_documents"] = []
@@ -121,21 +139,59 @@ class DocumentRetriever:
                 state["document_types_available"] = []
                 state["nodes_visited"].append("document_retriever")
                 
-                self.logger.warning("⚠️ Continuing with empty document set")
+                self.logger.warning("Continuing with empty document set")
                 
                 return state
     
-    def _enhance_query(self, query: str, intent: Intent) -> str:
+    async def _enhance_query(self, query: str, intent: Intent, history: List[Dict[str, str]] = None) -> str:
         """
-        Enhance query with intent-specific context
+        Enhance query with intent-specific context and conversation history
         
         Args:
             query: Original query
             intent: Classified intent
+            history: Conversation history
             
         Returns:
             Enhanced query string
         """
+        final_query = query
+        
+        # Check if query needs contextualization (short or contains reference words)
+        reference_words = ["it", "this", "that", "these", "those", "topic", "explain", "more", "detail", "he", "she", "they", "them", "first", "second", "last"]
+        words = query.lower().split()
+        needs_context = len(words) < 8 or any(word in words for word in reference_words)
+        
+        if needs_context and history and len(history) > 0:
+            try:
+                from app.services.llm_service import get_llm_service
+                llm = get_llm_service()
+                
+                # Format history for prompt (last 2 interactions)
+                history_text = "\n".join([f"{msg['role']}: {msg['content'][:200]}" for msg in history[-4:]])
+                
+                prompt = (
+                    "Given the following conversation history and the latest user query, "
+                    "rewrite the latest user query to be a standalone, highly descriptive search query "
+                    "that explicitly includes the subject/topic being discussed in the history. "
+                    "Replace pronouns like 'it' or 'the topic' with the actual topic name. "
+                    "If the query is already standalone, just return the query.\n\n"
+                    f"History:\n{history_text}\n\n"
+                    f"Latest Query: {query}\n\n"
+                    "Standalone Search Query (Return ONLY the query text, no other text or quotes):"
+                )
+                
+                rewritten_query = ""
+                async for chunk in llm.generate_stream(prompt, max_tokens=40, temperature=0.1):
+                    rewritten_query += chunk
+                    
+                rewritten_query = rewritten_query.strip().strip('"').strip("'")
+                if rewritten_query:
+                    final_query = rewritten_query
+                    self.logger.info(f"Contextualized query: '{query}' -> '{final_query}'")
+            except Exception as e:
+                self.logger.error(f"Failed to contextualize query: {e}")
+
         # Add intent-specific keywords to improve retrieval
         enhancements = {
             Intent.ANSWER_GENERATION: "answer solution explanation",
@@ -146,7 +202,7 @@ class DocumentRetriever:
         }
         
         enhancement = enhancements.get(intent, "")
-        return f"{query} {enhancement}".strip()
+        return f"{final_query} {enhancement}".strip()
     
     def _filter_and_rank_results(
         self,
@@ -155,37 +211,35 @@ class DocumentRetriever:
         user_id: int,
         n_results: int
     ) -> List[Dict[str, Any]]:
-        """
-        Filter and rank search results based on intent and user access
+        # Filter and rank search results based on intent and user access
         
-        Args:
-            search_results: Raw search results from vector store
-            intent: User intent
-            user_id: User ID for access control
-            n_results: Number of results to return
-            
-        Returns:
-            Filtered and ranked results
-        """
-        results = search_results.get("results", [])
+        # Iterate over pre-formatted results from VectorStoreService
+        results_list = search_results.get("results", [])
         
-        if not results:
+        if not results_list:
             return []
-        
+            
         # Get document type priorities for this intent
         type_priorities = self.DOCUMENT_TYPE_PRIORITIES.get(intent, [])
         
         # Score and filter results
         scored_results = []
-        for result in results:
+        for result in results_list:
             metadata = result.get("metadata", {})
+            document = result.get("document", "")
+            distance = result.get("distance", 0.0)
             
             # Check access (user's own docs or public docs)
             if metadata.get("user_id") != user_id and metadata.get("visibility") != "public":
                 continue
+                
+            # Convert distance to a similarity score (0 to 1) 
+            # ChromaDB cosine distance ranges from 0 (perfect match) to 2.0 (exact opposite)
+            # Mathematical conversion: Cosine Similarity = 1 - (Cosine Distance / 2)
+            similarity = 1.0 - (distance / 2.0)
             
             # Base score from similarity
-            score = result.get("similarity", 0.0)
+            score = similarity
             
             # Boost score based on document type priority
             doc_type = metadata.get("document_type", "other")
@@ -195,9 +249,13 @@ class DocumentRetriever:
                 score += boost
             
             # Filter by similarity threshold
-            if score >= settings.SIMILARITY_THRESHOLD:
+            if similarity >= settings.SIMILARITY_THRESHOLD:
                 scored_results.append({
-                    "result": result,
+                    "result": {
+                        "metadata": metadata,
+                        "document": document,
+                        "similarity": similarity
+                    },
                     "score": score
                 })
         
@@ -211,15 +269,7 @@ class DocumentRetriever:
         self,
         results: List[Dict[str, Any]]
     ) -> List[RetrievedDocument]:
-        """
-        Convert raw results to RetrievedDocument format
-        
-        Args:
-            results: Filtered search results
-            
-        Returns:
-            List of RetrievedDocument dicts
-        """
+        # Convert raw results to RetrievedDocument format
         retrieved_docs = []
         
         for result in results:
@@ -238,15 +288,7 @@ class DocumentRetriever:
         return retrieved_docs
     
     def _build_context(self, documents: List[RetrievedDocument]) -> str:
-        """
-        Build context string from retrieved documents
-        
-        Args:
-            documents: Retrieved documents
-            
-        Returns:
-            Formatted context string
-        """
+        # Build context string from retrieved documents
         if not documents:
             return ""
         
@@ -265,8 +307,11 @@ class DocumentRetriever:
             context_parts.append(f"\n--- {doc_type.upper().replace('_', ' ')} ---\n")
             
             for i, doc in enumerate(docs, 1):
-                # Add chunk with metadata
-                chunk_info = f"[Chunk {i} | Similarity: {doc['similarity_score']:.2f}]"
+                # Extract filename if available
+                filename = doc.get("metadata", {}).get("filename", "Unknown Document")
+                
+                # Add chunk with metadata (without chunk ID or technical similarity metrics)
+                chunk_info = f"[Source Section from: {filename}]"
                 context_parts.append(f"{chunk_info}\n{doc['chunk_text']}\n")
         
         return "\n".join(context_parts)
@@ -356,8 +401,8 @@ if __name__ == "__main__":
         
         result = await retrieve_documents_node(state)
         
-        print(f"\n📚 Retrieved {len(result['retrieved_documents'])} documents")
-        print(f"📝 Document types: {result['document_types_available']}")
-        print(f"\n🔍 Context preview:\n{result['context'][:500]}...")
+        print(f"\nRetrieved {len(result['retrieved_documents'])} documents")
+        print(f"Document types: {result['document_types_available']}")
+        print(f"\nContext preview:\n{result['context'][:500]}...")
     
     asyncio.run(test())

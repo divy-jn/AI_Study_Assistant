@@ -89,7 +89,7 @@ class IntentClassifier:
         """
         query = state["query"].lower()
         
-        self.logger.info(f"🎯 Classifying intent | Query: '{state['query'][:100]}'")
+        self.logger.info(f"Classifying intent | Query: '{state['query'][:100]}'")
         
         with LogExecutionTime(self.logger, "Intent classification"):
             try:
@@ -99,7 +99,7 @@ class IntentClassifier:
                 # Step 2: If confidence is low, use LLM
                 if confidence < 0.7:
                     self.logger.debug(
-                        f"⚠️ Low confidence ({confidence:.2f}), using LLM for classification"
+                        f"Low confidence ({confidence:.2f}), using LLM for classification"
                     )
                     intent, confidence = await self._llm_based_classification(state["query"])
                 
@@ -109,7 +109,7 @@ class IntentClassifier:
                 state["nodes_visited"].append("intent_classifier")
                 
                 self.logger.info(
-                    f"✅ Intent classified | "
+                    f"Intent classified | "
                     f"Intent: {intent.value} | "
                     f"Confidence: {confidence:.2%}"
                 )
@@ -117,7 +117,7 @@ class IntentClassifier:
                 return state
                 
             except Exception as e:
-                self.logger.error(f"❌ Intent classification failed: {str(e)}", exc_info=True)
+                self.logger.error(f"Intent classification failed: {str(e)}", exc_info=True)
                 raise WorkflowNodeException(
                     node_name="intent_classifier",
                     reason=str(e),
@@ -196,7 +196,7 @@ class IntentClassifier:
             return intent, confidence
             
         except Exception as e:
-            self.logger.warning(f"⚠️ LLM classification failed: {str(e)}")
+            self.logger.warning(f"LLM classification failed: {str(e)}")
             # Fallback to doubt clarification
             return Intent.DOUBT_CLARIFICATION, 0.6
     
@@ -242,7 +242,7 @@ if __name__ == "__main__":
             state = create_initial_state(user_id=1, query=query)
             result = await classify_intent_node(state)
             
-            print(f"\n📝 Query: {query}")
+            print(f"\nQuery: {query}")
             print(f"   Intent: {result['intent'].value}")
             print(f"   Confidence: {result['intent_confidence']:.2%}")
     

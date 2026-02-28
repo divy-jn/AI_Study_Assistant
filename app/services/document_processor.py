@@ -12,6 +12,7 @@ import re
 import PyPDF2
 import pdfplumber
 from docx import Document as DocxDocument
+from pptx import Presentation
 
 from app.core.logging_config import LoggerMixin, LogExecutionTime, get_logger
 from app.core.exceptions import (
@@ -75,7 +76,7 @@ class DocumentProcessor(LoggerMixin):
         self.max_file_size_mb = max_file_size_mb or settings.MAX_UPLOAD_SIZE_MB
         
         self.logger.info(
-            f"📄 Initialized Document Processor | "
+            f"Initialized Document Processor | "
             f"Chunk size: {self.chunk_size} | "
             f"Overlap: {self.chunk_overlap} | "
             f"Formats: {self.supported_formats}"
@@ -107,7 +108,7 @@ class DocumentProcessor(LoggerMixin):
         self._validate_file(file_path)
         
         self.logger.info(
-            f"📖 Processing document | "
+            f"Processing document | "
             f"File: {file_path.name} | "
             f"Size: {file_path.stat().st_size / 1024:.1f} KB"
         )
@@ -122,6 +123,8 @@ class DocumentProcessor(LoggerMixin):
                 text = self._parse_docx(file_path)
             elif file_ext == 'txt':
                 text = self._parse_txt(file_path)
+            elif file_ext == 'pptx':
+                text = self._parse_pptx(file_path)
             else:
                 raise InvalidDocumentFormatException(
                     filename=str(file_path),
@@ -147,7 +150,7 @@ class DocumentProcessor(LoggerMixin):
             )
             
             self.logger.info(
-                f"✅ Processed document | "
+                f"Processed document | "
                 f"Chars: {len(text):,} | "
                 f"Chunks: {len(chunks)}"
             )
@@ -258,10 +261,44 @@ class DocumentProcessor(LoggerMixin):
         except Exception as e:
             raise DocumentParsingException(
                 filename=str(file_path),
-                reason="DOCX parsing failed",
+                reason="Failed to parse DOCX file",
                 original_exception=e
             )
-    
+            
+    def _parse_pptx(self, file_path: Path) -> str:
+        """
+        Parse PPTX file
+        
+        Args:
+            file_path: Path to PPTX file
+            
+        Returns:
+            Extracted text from slides and shapes
+        """
+        try:
+            prs = Presentation(file_path)
+            text_parts = []
+            
+            for slide_idx, slide in enumerate(prs.slides, 1):
+                slide_text = []
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        slide_text.append(shape.text.strip())
+                
+                if slide_text:
+                    # Add a slide marker for better document context
+                    text_parts.append(f"[Slide {slide_idx}]")
+                    text_parts.append("\n".join(slide_text))
+                    
+            return "\n\n".join(text_parts)
+            
+        except Exception as e:
+            raise DocumentParsingException(
+                filename=str(file_path),
+                reason="Failed to parse PPTX file",
+                original_exception=e
+            )
+
     def _parse_txt(self, file_path: Path) -> str:
         """
         Parse TXT file with encoding detection
@@ -491,9 +528,9 @@ if __name__ == "__main__":
         metadata={"topic": "ML", "type": "notes"}
     )
     
-    print(f"✅ Processed text:")
+    print(f"Processed text:")
     print(f"   Total chars: {parsed.total_chars:,}")
     print(f"   Total chunks: {parsed.total_chunks}")
-    print(f"\n📝 First chunk:")
+    print(f"\nFirst chunk:")
     print(f"   {parsed.chunks[0].text[:200]}...")
     print(f"   Tokens: {parsed.chunks[0].token_count}")
